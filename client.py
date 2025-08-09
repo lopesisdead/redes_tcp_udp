@@ -19,7 +19,6 @@ if PROTO == "tcp":
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((HOST, PORT))
 
-    # envia cabeçalho com \n no final
     sock.sendall(f"{msg_size},{msg_count}\n".encode())
 
     sent_msgs = 0
@@ -48,31 +47,18 @@ else:
     # envia cabeçalho
     sock.sendto(f"{msg_size},{msg_count}".encode(), addr)
 
-    sent_msgs = 0
     total_bytes = 0
-    retrans = 0
-    timeout = 0.3
-    sock.settimeout(timeout)
-
     start_time = time.perf_counter()
+
     for seq in range(1, msg_count + 1):
         msg = f"{seq}|".encode() + payload
-        while True:
-            sock.sendto(msg, addr)
-            total_bytes += len(msg)
-            sent_msgs += 1
-            try:
-                sock.recvfrom(3)  # espera ACK
-                break
-            except socket.timeout:
-                retrans += 1
-                continue
+        sock.sendto(msg, addr)
+        total_bytes += len(msg)
 
     elapsed = time.perf_counter() - start_time
     sock.close()
 
-    print(f"\n--- Cliente UDP ---")
+    print(f"\n--- Cliente UDP (sem ACK) ---")
     print(f"Tempo total: {elapsed:.4f}s")
     print(f"Throughput: {total_bytes / elapsed:.2f} bytes/s")
-    print(f"Mensagens enviadas: {sent_msgs} (incluindo retransmissões)")
-    print(f"Retransmissões: {retrans}")
+    print(f"Mensagens enviadas: {msg_count}")

@@ -20,7 +20,7 @@ def run_tcp():
     conn, addr = sock.accept()
     print(f"[TCP] Conexão de {addr}")
 
-    # --- Ler cabeçalho até \n ---
+    # lê cabeçalho
     header_data = b""
     while b"\n" not in header_data:
         chunk = conn.recv(1)
@@ -56,13 +56,12 @@ def run_tcp():
     print(f"Mensagens recebidas: {received_msgs}/{msg_count}")
     print(f"Perdas: {msg_count - received_msgs}")
 
-
 def run_udp():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((HOST, PORT))
     print(f"[UDP] Servidor escutando em {HOST}:{PORT}")
 
-    # 1º pacote: tam_msg e qtd_msgs
+    # recebe cabeçalho
     header, addr = sock.recvfrom(1024)
     msg_size, msg_count = map(int, header.decode().strip().split(","))
     print(f"[UDP] Recebendo {msg_count} mensagens de {msg_size} bytes...")
@@ -75,13 +74,12 @@ def run_udp():
     start_time = time.perf_counter()
     while received_msgs < msg_count:
         try:
-            data, addr = sock.recvfrom(msg_size + 20)
+            data, _ = sock.recvfrom(msg_size + 20)
         except:
             continue
         if not data:
             continue
 
-        # sequência no início da mensagem
         seq = int(data.split(b"|", 1)[0])
         if seq != expected_seq:
             losses += (seq - expected_seq)
@@ -90,7 +88,6 @@ def run_udp():
 
         total_bytes += len(data)
         received_msgs += 1
-        sock.sendto(b"ACK", addr)  # confirma recebimento
 
     elapsed = time.perf_counter() - start_time
     sock.close()
