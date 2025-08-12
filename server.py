@@ -20,7 +20,8 @@ def run_tcp():
     conn, addr = sock.accept()
     print(f"[TCP] Conexão de {addr}")
 
-    # lê cabeçalho
+    # A leitura do cabeçalho está OK, embora ler 1 byte por vez seja ineficiente.
+    # Para este teste, não é um problema.
     header_data = b""
     while b"\n" not in header_data:
         chunk = conn.recv(1)
@@ -35,14 +36,33 @@ def run_tcp():
     print(f"[TCP] Recebendo {msg_count} mensagens de {msg_size} bytes...")
 
     received_msgs = 0
-    total_bytes = 0
+    total_bytes_received = 0
     start_time = time.perf_counter()
 
     while received_msgs < msg_count:
-        data = conn.recv(msg_size)
-        if not data:
+        # --- INÍCIO DA CORREÇÃO ---
+        bytes_da_mensagem_atual = b""
+        bytes_faltando = msg_size
+        
+        # Este loop garante que leremos uma mensagem completa de 'msg_size'
+        while len(bytes_da_mensagem_atual) < msg_size:
+            # Pedimos para receber apenas os bytes que ainda faltam para completar a mensagem
+            chunk = conn.recv(bytes_faltando)
+            if not chunk:
+                # Se recv() retorna vazio, a conexão foi fechada pelo cliente
+                print("Conexão encerrada prematuramente pelo cliente.")
+                break
+            
+            bytes_da_mensagem_atual += chunk
+            bytes_faltando -= len(chunk)
+        
+        if len(bytes_da_mensagem_atual) != msg_size:
+            # Se saímos do loop sem a mensagem completa, algo deu errado
             break
-        total_bytes += len(data)
+        # --- FIM DA CORREÇÃO ---
+
+        # Agora 'bytes_da_mensagem_atual' contém a mensagem completa
+        total_bytes_received += len(bytes_da_mensagem_atual)
         received_msgs += 1
         conn.sendall(b"ACK")
 
@@ -52,9 +72,10 @@ def run_tcp():
 
     print(f"\n--- Resultados TCP ---")
     print(f"Tempo total: {elapsed:.4f}s")
-    print(f"Throughput: {total_bytes / elapsed:.2f} bytes/s")
+    if elapsed > 0:
+        print(f"Throughput: {total_bytes_received / elapsed:.2f} bytes/s")
     print(f"Mensagens recebidas: {received_msgs}/{msg_count}")
-    print(f"Perdas: {msg_count - received_msgs}")
+    print(f"Perdas (mensagens não recebidas): {msg_count - received_msgs}")
 
 def run_udp():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
