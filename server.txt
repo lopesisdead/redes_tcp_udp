@@ -1,0 +1,54 @@
+def run_udp():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(2.0)
+    sock.bind((HOST, PORT))
+    print(f"[UDP] Servidor escutando em {HOST}:{PORT}")
+
+    try:
+        header, addr = sock.recvfrom(1024)
+        msg_size, msg_count = map(int, header.decode().strip().split(","))
+        print(f"[UDP] Recebendo {msg_count} mensagens de {msg_size} bytes de {addr}...")
+    except socket.timeout:
+        print("[UDP] Timeout: Nenhuma comunicação iniciada. Servidor desligando.")
+        sock.close()
+        return
+
+    received_msgs = 0
+    total_bytes = 0
+    start_time = 0
+    end_time = 0
+    
+    # Adicionamos um timeout adicional para o caso de o cliente enviar menos pacotes
+    expected_end_time = time.perf_counter() + 5.0  # 5 segundos para receber todos os pacotes
+    
+    while received_msgs < msg_count and time.perf_counter() < expected_end_time:
+        try:
+            data, _ = sock.recvfrom(BUFFER)
+            
+            if start_time == 0:
+                start_time = time.perf_counter()
+            
+            # Verifica se o pacote tem o tamanho esperado
+            if len(data) == msg_size:
+                received_msgs += 1
+                total_bytes += len(data)
+                end_time = time.perf_counter()
+
+        except socket.timeout:
+            print(f"[UDP] Timeout parcial. Recebidos {received_msgs}/{msg_count}")
+            break
+
+    sock.close()
+
+    total_loss = msg_count - received_msgs
+    elapsed = end_time - start_time if start_time > 0 else 0
+
+    print(f"\n--- Resultados UDP ---")
+    if elapsed > 0:
+        print(f"Tempo de transmissão: {elapsed:.4f}s")
+        print(f"Throughput: {total_bytes / elapsed:.2f} bytes/s")
+    else:
+        print("Nenhuma mensagem de dados foi recebida.")
+        
+    print(f"Mensagens recebidas: {received_msgs}/{msg_count}")
+    print(f"Total de perdas: {total_loss}")

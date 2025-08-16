@@ -79,16 +79,11 @@ def run_tcp():
 
 def run_udp():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    
-    # IMPORTANTE: Definimos um timeout no socket.
-    # Se recvfrom() não receber nada em 2.0 segundos, ele lançará uma exceção.
     sock.settimeout(2.0)
-    
     sock.bind((HOST, PORT))
     print(f"[UDP] Servidor escutando em {HOST}:{PORT}")
 
     try:
-        # Ainda precisamos do cabeçalho para saber o total esperado
         header, addr = sock.recvfrom(1024)
         msg_size, msg_count = map(int, header.decode().strip().split(","))
         print(f"[UDP] Recebendo {msg_count} mensagens de {msg_size} bytes de {addr}...")
@@ -102,38 +97,35 @@ def run_udp():
     start_time = 0
     end_time = 0
     
-    # O loop agora é infinito e só será quebrado pelo timeout.
-    while True:
+    # Adicionamos um timeout adicional para o caso de o cliente enviar menos pacotes
+    expected_end_time = time.perf_counter() + 5.0  # 5 segundos para receber todos os pacotes
+    
+    while received_msgs < msg_count and time.perf_counter() < expected_end_time:
         try:
             data, _ = sock.recvfrom(BUFFER)
             
-            # Se for a primeira mensagem, marca o tempo de início
             if start_time == 0:
                 start_time = time.perf_counter()
-
-            # Atualiza o tempo de fim a cada pacote recebido
-            end_time = time.perf_counter()
             
-            received_msgs += 1
-            total_bytes += len(data)
+            # Verifica se o pacote tem o tamanho esperado
+            if len(data) == msg_size:
+                received_msgs += 1
+                total_bytes += len(data)
+                end_time = time.perf_counter()
 
         except socket.timeout:
-            # Se chegamos aqui, significa que se passaram 2s sem receber pacotes.
-            # Assumimos que a transmissão terminou.
-            print("[UDP] Timeout detectado. Finalizando a recepção.")
-            break # Quebra o loop "while True"
+            print(f"[UDP] Timeout parcial. Recebidos {received_msgs}/{msg_count}")
+            break
 
     sock.close()
 
-    # --- Lógica de cálculo dos resultados ---
-    # A perda total é simplesmente o que o cliente disse que enviaria vs. o que recebemos.
     total_loss = msg_count - received_msgs
     elapsed = end_time - start_time if start_time > 0 else 0
 
     print(f"\n--- Resultados UDP ---")
     if elapsed > 0:
-        print(f"Tempo de transmissão (do primeiro ao último pacote): {elapsed:.4f}s")
-        print(f"Throughput (dados recebidos): {total_bytes / elapsed:.2f} bytes/s")
+        print(f"Tempo de transmissão: {elapsed:.4f}s")
+        print(f"Throughput: {total_bytes / elapsed:.2f} bytes/s")
     else:
         print("Nenhuma mensagem de dados foi recebida.")
         
