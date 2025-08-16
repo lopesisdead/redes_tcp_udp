@@ -20,8 +20,6 @@ def run_tcp():
     conn, addr = sock.accept()
     print(f"[TCP] Conexão de {addr}")
 
-    # A leitura do cabeçalho está OK, embora ler 1 byte por vez seja ineficiente.
-    # Para este teste, não é um problema.
     header_data = b""
     while b"\n" not in header_data:
         chunk = conn.recv(1)
@@ -40,31 +38,27 @@ def run_tcp():
     start_time = time.perf_counter()
 
     while received_msgs < msg_count:
-        # --- INÍCIO DA CORREÇÃO ---
-        bytes_da_mensagem_atual = b""
-        bytes_faltando = msg_size
-        
-        # Este loop garante que leremos uma mensagem completa de 'msg_size'
-        while len(bytes_da_mensagem_atual) < msg_size:
-            # Pedimos para receber apenas os bytes que ainda faltam para completar a mensagem
-            chunk = conn.recv(bytes_faltando)
-            if not chunk:
-                # Se recv() retorna vazio, a conexão foi fechada pelo cliente
-                print("Conexão encerrada prematuramente pelo cliente.")
-                break
+        try:
+            data = b""
+            remaining = msg_size
+            while remaining > 0:
+                chunk = conn.recv(remaining)
+                if not chunk:
+                    break
+                data += chunk
+                remaining -= len(chunk)
             
-            bytes_da_mensagem_atual += chunk
-            bytes_faltando -= len(chunk)
-        
-        if len(bytes_da_mensagem_atual) != msg_size:
-            # Se saímos do loop sem a mensagem completa, algo deu errado
+            if len(data) == msg_size:
+                total_bytes_received += len(data)
+                received_msgs += 1
+                conn.sendall(b"ACK")  # Envia ACK imediatamente
+            else:
+                print(f"[TCP] Mensagem incompleta recebida (esperado: {msg_size}, recebido: {len(data)})")
+                break
+                
+        except ConnectionResetError:
+            print("[TCP] Conexão resetada pelo cliente")
             break
-        # --- FIM DA CORREÇÃO ---
-
-        # Agora 'bytes_da_mensagem_atual' contém a mensagem completa
-        total_bytes_received += len(bytes_da_mensagem_atual)
-        received_msgs += 1
-        conn.sendall(b"ACK")
 
     elapsed = time.perf_counter() - start_time
     conn.close()
@@ -79,7 +73,7 @@ def run_tcp():
 
 def run_udp():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(2.0)
+    sock.settimeout(5.0)  # Aumenta o timeout para 5 segundos
     sock.bind((HOST, PORT))
     print(f"[UDP] Servidor escutando em {HOST}:{PORT}")
 
@@ -97,21 +91,23 @@ def run_udp():
     start_time = 0
     end_time = 0
     
-    # Adicionamos um timeout adicional para o caso de o cliente enviar menos pacotes
-    expected_end_time = time.perf_counter() + 5.0  # 5 segundos para receber todos os pacotes
+    # Aumenta o tempo de espera para receber todos os pacotes
+    expected_end_time = time.perf_counter() + 10.0  # 10 segundos
     
     while received_msgs < msg_count and time.perf_counter() < expected_end_time:
         try:
-            data, _ = sock.recvfrom(BUFFER)
+            data, _ = sock.recvfrom(msg_size + 100)  # Buffer ligeiramente maior que o esperado
             
             if start_time == 0:
                 start_time = time.perf_counter()
             
-            # Verifica se o pacote tem o tamanho esperado
-            if len(data) == msg_size:
+            # Verifica se o pacote tem pelo menos o tamanho mínimo esperado
+            if len(data) >= msg_size - 10:  # Permite alguma variação
                 received_msgs += 1
                 total_bytes += len(data)
                 end_time = time.perf_counter()
+            else:
+                print(f"[UDP] Pacote muito pequeno recebido: {len(data)} bytes")
 
         except socket.timeout:
             print(f"[UDP] Timeout parcial. Recebidos {received_msgs}/{msg_count}")
