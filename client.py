@@ -17,29 +17,57 @@ payload = b"x" * (msg_size - 10)  # reserva espaço p/ seq num
 
 if PROTO == "tcp":
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((HOST, PORT))
-
-    sock.sendall(f"{msg_size},{msg_count}\n".encode())
-
-    sent_msgs = 0
-    total_bytes = 0
-    start_time = time.perf_counter()
-
-    for seq in range(1, msg_count + 1):
-        msg = f"{seq}|".encode() + payload
-        sock.sendall(msg)
-        total_bytes += len(msg)
-        sent_msgs += 1
-        sock.recv(3)  # espera ACK
+    
+    # Adiciona timeout para evitar bloqueio eterno
+    sock.settimeout(5.0)
+    
+    try:
+        sock.connect((HOST, PORT))
         
+        # Envia cabeçalho com nova linha no final
+        header = f"{msg_size},{msg_count}\n"
+        sock.sendall(header.encode())
 
-    elapsed = time.perf_counter() - start_time
-    sock.close()
+        sent_msgs = 0
+        total_bytes = 0
+        start_time = time.perf_counter()
 
-    print(f"\n--- Cliente TCP ---")
-    print(f"Tempo total: {elapsed:.4f}s")
-    print(f"Throughput: {total_bytes / elapsed:.2f} bytes/s")
-    print(f"Mensagens enviadas: {sent_msgs}")
+        for seq in range(1, msg_count + 1):
+            msg = f"{seq}|".encode() + payload
+            
+            # Tenta enviar até receber confirmação
+            while True:
+                try:
+                    sock.sendall(msg)
+                    total_bytes += len(msg)
+                    
+                    # Espera ACK com verificação
+                    ack = sock.recv(3)
+                    if ack != b"ACK":
+                        print(f"Erro: ACK inválido recebido: {ack}")
+                        continue
+                    
+                    sent_msgs += 1
+                    break
+                
+                except socket.timeout:
+                    print(f"Timeout ao enviar mensagem {seq}, tentando novamente...")
+                    continue
+                except ConnectionError as e:
+                    print(f"Erro de conexão: {e}")
+                    sock.close()
+                    sys.exit(1)
+
+        elapsed = time.perf_counter() - start_time
+        print(f"\n--- Cliente TCP ---")
+        print(f"Tempo total: {elapsed:.4f}s")
+        print(f"Throughput: {total_bytes / elapsed:.2f} bytes/s")
+        print(f"Mensagens enviadas: {sent_msgs}")
+
+    except socket.error as e:
+        print(f"Erro no socket: {e}")
+    finally:
+        sock.close()
 
 else:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
