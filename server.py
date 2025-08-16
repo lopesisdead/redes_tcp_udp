@@ -20,6 +20,7 @@ def run_tcp():
     conn, addr = sock.accept()
     print(f"[TCP] Conexão de {addr}")
 
+    # Leitura do cabeçalho
     header_data = b""
     while b"\n" not in header_data:
         chunk = conn.recv(1)
@@ -37,28 +38,40 @@ def run_tcp():
     total_bytes_received = 0
     start_time = time.perf_counter()
 
-    while received_msgs < msg_count:
-        try:
-            data = b""
-            remaining = msg_size
-            while remaining > 0:
-                chunk = conn.recv(remaining)
-                if not chunk:
-                    break
-                data += chunk
-                remaining -= len(chunk)
+    # Adicionamos um timeout para evitar loop infinito
+    conn.settimeout(5.0)  # Timeout de 5 segundos
+
+    try:
+        while received_msgs < msg_count:
+            bytes_da_mensagem_atual = b""
+            bytes_faltando = msg_size
             
-            if len(data) == msg_size:
-                total_bytes_received += len(data)
-                received_msgs += 1
-                conn.sendall(b"ACK")  # Envia ACK imediatamente
-            else:
-                print(f"[TCP] Mensagem incompleta recebida (esperado: {msg_size}, recebido: {len(data)})")
+            while len(bytes_da_mensagem_atual) < msg_size:
+                try:
+                    chunk = conn.recv(bytes_faltando)
+                    if not chunk:
+                        # Conexão fechada pelo cliente
+                        print("Conexão encerrada prematuramente pelo cliente.")
+                        break
+                    
+                    bytes_da_mensagem_atual += chunk
+                    bytes_faltando -= len(chunk)
+                except socket.timeout:
+                    print("Timeout ao esperar mensagem completa")
+                    break
+            
+            if len(bytes_da_mensagem_atual) != msg_size:
+                # Mensagem incompleta - sair do loop
+                print(f"Mensagem incompleta recebida (tamanho {len(bytes_da_mensagem_atual)}/{msg_size})")
                 break
-                
-        except ConnectionResetError:
-            print("[TCP] Conexão resetada pelo cliente")
-            break
+
+            total_bytes_received += len(bytes_da_mensagem_atual)
+            received_msgs += 1
+            conn.sendall(b"ACK")
+    except socket.timeout:
+        print("Timeout geral na conexão TCP")
+    except ConnectionResetError:
+        print("Conexão resetada pelo cliente")
 
     elapsed = time.perf_counter() - start_time
     conn.close()
