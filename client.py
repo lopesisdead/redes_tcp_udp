@@ -17,7 +17,7 @@ payload = b"x" * (msg_size - 10)  # reserva espaço p/ seq num
 
 if PROTO == "tcp":
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(5.0)  # timeout de segurança
+    sock.settimeout(20.0)  # timeout de segurança
 
     try:
         sock.connect((HOST, PORT))
