@@ -31,6 +31,7 @@ if PROTO == "tcp":
         total_bytes += len(msg)
         sent_msgs += 1
         sock.recv(3)  # espera ACK
+        
 
     elapsed = time.perf_counter() - start_time
     sock.close()
@@ -54,6 +55,7 @@ else:
         msg = f"{seq}|".encode() + payload
         sock.sendto(msg, addr)
         total_bytes += len(msg)
+        time.sleep(0.0001)
 
     elapsed = time.perf_counter() - start_time
     sock.close()
