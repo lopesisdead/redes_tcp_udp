@@ -55,7 +55,6 @@ else:
         msg = f"{seq}|".encode() + payload
         sock.sendto(msg, addr)
         total_bytes += len(msg)
-        time.sleep(0.0001)
 
     elapsed = time.perf_counter() - start_time
     sock.close()
