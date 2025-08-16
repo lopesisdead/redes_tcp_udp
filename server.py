@@ -12,6 +12,17 @@ if len(sys.argv) < 2 or sys.argv[1] not in ("tcp", "udp"):
 
 PROTO = sys.argv[1].lower()
 
+def recv_exact(conn, size):
+    """Lê exatamente `size` bytes do socket."""
+    data = b""
+    while len(data) < size:
+        chunk = conn.recv(size - len(data))
+        if not chunk:
+            # conexão fechada antes de receber tudo
+            return None
+        data += chunk
+    return data
+
 def run_tcp():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((HOST, PORT))
@@ -38,39 +49,17 @@ def run_tcp():
     total_bytes_received = 0
     start_time = time.perf_counter()
 
-    conn.settimeout(5.0)
-
     try:
         while received_msgs < msg_count:
-            bytes_da_mensagem_atual = b""
-            bytes_faltando = msg_size
+            msg = recv_exact(conn, msg_size)
+            if msg is None:
+                print("Conexão encerrada prematuramente pelo cliente.")
+                break
 
-            while len(bytes_da_mensagem_atual) < msg_size:
-                try:
-                    chunk = conn.recv(bytes_faltando)
-                    if not chunk:
-                        # cliente fechou a conexão
-                        if received_msgs < msg_count:
-                            print("Conexão encerrada prematuramente pelo cliente.")
-                        conn.close()
-                        sock.close()
-                        return
-                    bytes_da_mensagem_atual += chunk
-                    bytes_faltando -= len(chunk)
-                except socket.timeout:
-                    print("Timeout ao esperar mensagem completa")
-                    break
-
-            if len(bytes_da_mensagem_atual) != msg_size:
-                print(f"Mensagem incompleta recebida ({len(bytes_da_mensagem_atual)}/{msg_size})")
-                continue  # tenta próxima
-
-            total_bytes_received += len(bytes_da_mensagem_atual)
+            total_bytes_received += len(msg)
             received_msgs += 1
             conn.sendall(b"ACK")
 
-    except socket.timeout:
-        print("Timeout geral na conexão TCP")
     except ConnectionResetError:
         print("Conexão resetada pelo cliente")
 
@@ -84,6 +73,7 @@ def run_tcp():
         print(f"Throughput: {total_bytes_received / elapsed:.2f} bytes/s")
     print(f"Mensagens recebidas: {received_msgs}/{msg_count}")
     print(f"Perdas (mensagens não recebidas): {msg_count - received_msgs}")
+
 
 def run_udp():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
