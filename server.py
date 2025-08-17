@@ -74,9 +74,11 @@ def run_tcp():
     print(f"Mensagens recebidas: {received_msgs}/{msg_count}")
     print(f"Perdas (mensagens não recebidas): {msg_count - received_msgs}")
 
-
 def run_udp():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Aumenta o buffer de recepção
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024*1024)  # 1MB buffer
+    
     sock.settimeout(5.0)
     sock.bind((HOST, PORT))
     print(f"[UDP] Servidor escutando em {HOST}:{PORT}")

@@ -70,19 +70,27 @@ if PROTO == "tcp":
     finally:
         sock.close()
 
-else:
+else:  # Parte UDP
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     addr = (HOST, PORT)
 
+    # Envia cabeçalho
     sock.sendto(f"{msg_size},{msg_count}".encode(), addr)
 
     total_bytes = 0
     start_time = time.perf_counter()
 
+    # Intervalo entre pacotes ajustável
+    packet_interval = 0.0001  # 100μs (ajuste conforme necessário)
+
     for seq in range(1, msg_count + 1):
         msg = f"{seq}|".encode() + payload
         sock.sendto(msg, addr)
         total_bytes += len(msg)
+        
+        # Intervalo entre pacotes
+        if msg_count > 500:  # Só aplica delay para grandes quantidades
+            time.sleep(packet_interval)
 
     elapsed = time.perf_counter() - start_time
     sock.close()
